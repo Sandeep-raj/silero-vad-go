@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build linux && (amd64 || arm64)
 
 package speech
 
