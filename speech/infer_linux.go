@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build linux && cgo
 
 package speech
 
@@ -23,9 +23,9 @@ func (sd *Detector) infer(samples []float32) (float32, error) {
 
 	// Create tensors
 	var pcmValue *C.OrtValue
-	pcmInputDims := []C.long{
+	pcmInputDims := []C.int64_t{
 		1,
-		C.long(len(pcm)),
+		C.int64_t(len(pcm)),
 	}
 	status := C.OrtApiCreateTensorWithDataAsOrtValue(sd.api, sd.memoryInfo, unsafe.Pointer(&pcm[0]), C.size_t(len(pcm)*4), &pcmInputDims[0], C.size_t(len(pcmInputDims)), C.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &pcmValue)
 	defer C.OrtApiReleaseStatus(sd.api, status)
@@ -35,7 +35,7 @@ func (sd *Detector) infer(samples []float32) (float32, error) {
 	defer C.OrtApiReleaseValue(sd.api, pcmValue)
 
 	var stateValue *C.OrtValue
-	stateNodeInputDims := []C.long{2, 1, 128}
+	stateNodeInputDims := []C.int64_t{2, 1, 128}
 	status = C.OrtApiCreateTensorWithDataAsOrtValue(sd.api, sd.memoryInfo, unsafe.Pointer(&sd.state[0]), C.size_t(stateLen*4), &stateNodeInputDims[0], C.size_t(len(stateNodeInputDims)), C.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &stateValue)
 	defer C.OrtApiReleaseStatus(sd.api, status)
 	if status != nil {
@@ -44,7 +44,7 @@ func (sd *Detector) infer(samples []float32) (float32, error) {
 	defer C.OrtApiReleaseValue(sd.api, stateValue)
 
 	var rateValue *C.OrtValue
-	rateInputDims := []C.long{1}
+	rateInputDims := []C.int64_t{1}
 	rate := []C.int64_t{C.int64_t(sd.cfg.SampleRate)}
 	status = C.OrtApiCreateTensorWithDataAsOrtValue(sd.api, sd.memoryInfo, unsafe.Pointer(&rate[0]), C.size_t(8), &rateInputDims[0], C.size_t(len(rateInputDims)), C.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &rateValue)
 	defer C.OrtApiReleaseStatus(sd.api, status)
