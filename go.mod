@@ -1,4 +1,4 @@
-module github.com/streamer45/silero-vad-go
+module github.com/skvarunan/silero-vad-go
 
 go 1.21.4
 
