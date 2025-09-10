@@ -1,4 +1,4 @@
-module github.com/skvarunan/silero-vad-go
+module github.com/Sandeep-raj/silero-vad-go
 
 go 1.21.4
 
