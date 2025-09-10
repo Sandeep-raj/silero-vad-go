@@ -279,7 +279,7 @@ func NewDetector(cfg DetectorConfig) (*Detector, error) {
 	// 	return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
 	// }
 
-	status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
+	status := C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
 	defer C.OrtApiReleaseStatus(ortApi, status)
 	if status != nil {
 		return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
