@@ -181,7 +181,7 @@ func InitOnnx(logLevel LogLevel, modelPath string) error {
 		defer C.OrtApiReleaseStatus(ortApi, status)
 		if status != nil {
 			// release session before returning
-			C.OrtApiReleaseSession(ortApi, session)
+			C.OrtApiReleaseSession(ortApi, ortSession)
 			onnxInitErr = fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
 			return
 		}
