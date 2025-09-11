@@ -208,21 +208,21 @@ func NewDetector(cfg DetectorConfig) (*Detector, error) {
 		sessionOpts: ortSessionOpts,
 	}
 
-	sd.session = ortSession
-	sd.memoryInfo = ortMemoryInfo
+	// sd.session = ortSession
+	// sd.memoryInfo = ortMemoryInfo
 
-	// sd.cStrings["modelPath"] = C.CString(cfg.ModelPath)
-	// status := C.OrtApiCreateSession(ortApi, ortEnv, sd.cStrings["modelPath"], ortSessionOpts, &sd.session)
-	// defer C.OrtApiReleaseStatus(ortApi, status)
-	// if status != nil {
-	// 	return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-	// }
+	sd.cStrings["modelPath"] = C.CString(cfg.ModelPath)
+	status := C.OrtApiCreateSession(ortApi, ortEnv, sd.cStrings["modelPath"], ortSessionOpts, &sd.session)
+	defer C.OrtApiReleaseStatus(ortApi, status)
+	if status != nil {
+		return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+	}
 
-	// status := C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
-	// defer C.OrtApiReleaseStatus(ortApi, status)
-	// if status != nil {
-	// 	return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-	// }
+	status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
+	defer C.OrtApiReleaseStatus(ortApi, status)
+	if status != nil {
+		return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+	}
 
 	// Input/Output names
 	sd.cStrings["input"] = C.CString("input")
@@ -352,10 +352,8 @@ func (sd *Detector) Destroy() error {
 		return fmt.Errorf("invalid nil detector")
 	}
 
-	// C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
-	// if err := ReleaseSharedSession(sd.cfg.ModelPath); err != nil {
-	// 	return err
-	// }
+	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
+	C.OrtApiReleaseSession(sd.api, sd.session)
 
 	for _, ptr := range sd.cStrings {
 		C.free(unsafe.Pointer(ptr))
