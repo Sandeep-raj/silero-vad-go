@@ -108,94 +108,14 @@ var (
 	ortApi         *C.OrtApi
 	ortEnv         *C.OrtEnv
 	ortSessionOpts *C.OrtSessionOptions
+	ortSession     *C.OrtSession
+	ortMemoryInfo  *C.OrtMemoryInfo // optional shared memory info; you may still create per-detector meminfo
 	onnxInitOnce   sync.Once
 	onnxInitErr    error
 )
 
-type sharedSession struct {
-	session    *C.OrtSession
-	memoryInfo *C.OrtMemoryInfo // optional shared memory info; you may still create per-detector meminfo
-	refcount   int
-}
-
-// sessionManager maintains sessions per modelPath
-var (
-	smMu  sync.Mutex
-	smMap = map[string]*sharedSession{}
-)
-
-// GetSharedSession returns (session, memoryInfo) and increments refcount.
-// Caller MUST call ReleaseSharedSession when done.
-func GetSharedSession(modelPath string) (*C.OrtSession, *C.OrtMemoryInfo, error) {
-	if ortApi == nil || ortEnv == nil || ortSessionOpts == nil {
-		return nil, nil, fmt.Errorf("onnx not initialized")
-	}
-
-	smMu.Lock()
-	defer smMu.Unlock()
-
-	ss, ok := smMap[modelPath]
-	if ok {
-		ss.refcount++
-		return ss.session, ss.memoryInfo, nil
-	}
-
-	// create session
-	cModelPath := C.CString(modelPath)
-	defer C.free(unsafe.Pointer(cModelPath))
-
-	var status *C.OrtStatus
-	var session *C.OrtSession
-	status = C.OrtApiCreateSession(ortApi, ortEnv, cModelPath, ortSessionOpts, &session)
-	defer C.OrtApiReleaseStatus(ortApi, status)
-	if status != nil {
-		return nil, nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-	}
-
-	// create memoryInfo (you may reuse one global meminfo instead)
-	var mem *C.OrtMemoryInfo
-	status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &mem)
-	defer C.OrtApiReleaseStatus(ortApi, status)
-	if status != nil {
-		// release session before returning
-		C.OrtApiReleaseSession(ortApi, session)
-		return nil, nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-	}
-
-	ss = &sharedSession{
-		session:    session,
-		memoryInfo: mem,
-		refcount:   1,
-	}
-	smMap[modelPath] = ss
-
-	return ss.session, ss.memoryInfo, nil
-}
-
-// ReleaseSharedSession decrements reference count and frees session when 0.
-func ReleaseSharedSession(modelPath string) error {
-	smMu.Lock()
-	defer smMu.Unlock()
-
-	ss, ok := smMap[modelPath]
-	if !ok {
-		return fmt.Errorf("no shared session for %s", modelPath)
-	}
-
-	ss.refcount--
-	if ss.refcount > 0 {
-		return nil
-	}
-
-	// free resources
-	C.OrtApiReleaseMemoryInfo(ortApi, ss.memoryInfo)
-	C.OrtApiReleaseSession(ortApi, ss.session)
-	delete(smMap, modelPath)
-	return nil
-}
-
 // InitOnnx initializes ONNX Runtime once per process and reuses env/session options.
-func InitOnnx(logLevel LogLevel) error {
+func InitOnnx(logLevel LogLevel, modelPath string) error {
 	onnxInitOnce.Do(func() {
 		ortApi = C.OrtGetApi()
 		if ortApi == nil {
@@ -244,6 +164,27 @@ func InitOnnx(logLevel LogLevel) error {
 			onnxInitErr = fmt.Errorf("failed to set graph optimization: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
 			return
 		}
+
+		// create session
+		cModelPath := C.CString(modelPath)
+		defer C.free(unsafe.Pointer(cModelPath))
+
+		status = C.OrtApiCreateSession(ortApi, ortEnv, cModelPath, ortSessionOpts, &ortSession)
+		defer C.OrtApiReleaseStatus(ortApi, status)
+		if status != nil {
+			onnxInitErr = fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+			return
+		}
+
+		// create memoryInfo (you may reuse one global meminfo instead)
+		status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &ortMemoryInfo)
+		defer C.OrtApiReleaseStatus(ortApi, status)
+		if status != nil {
+			// release session before returning
+			C.OrtApiReleaseSession(ortApi, session)
+			onnxInitErr = fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+			return
+		}
 	})
 
 	return onnxInitErr
@@ -255,7 +196,7 @@ func NewDetector(cfg DetectorConfig) (*Detector, error) {
 	}
 
 	// Ensure ONNX is initialized
-	if err := InitOnnx(cfg.LogLevel); err != nil {
+	if err := InitOnnx(cfg.LogLevel, cfg.ModelPath); err != nil {
 		return nil, err
 	}
 
@@ -267,12 +208,8 @@ func NewDetector(cfg DetectorConfig) (*Detector, error) {
 		sessionOpts: ortSessionOpts,
 	}
 
-	// Get shared session for the modelPath
-	session, _, err := GetSharedSession(cfg.ModelPath)
-	if err != nil {
-		return nil, err
-	}
-	sd.session = session
+	sd.session = ortSession
+	sd.memoryInfo = ortMemoryInfo
 
 	// sd.cStrings["modelPath"] = C.CString(cfg.ModelPath)
 	// status := C.OrtApiCreateSession(ortApi, ortEnv, sd.cStrings["modelPath"], ortSessionOpts, &sd.session)
@@ -281,11 +218,11 @@ func NewDetector(cfg DetectorConfig) (*Detector, error) {
 	// 	return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
 	// }
 
-	status := C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
-	defer C.OrtApiReleaseStatus(ortApi, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-	}
+	// status := C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
+	// defer C.OrtApiReleaseStatus(ortApi, status)
+	// if status != nil {
+	// 	return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+	// }
 
 	// Input/Output names
 	sd.cStrings["input"] = C.CString("input")
@@ -415,10 +352,10 @@ func (sd *Detector) Destroy() error {
 		return fmt.Errorf("invalid nil detector")
 	}
 
-	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
-	if err := ReleaseSharedSession(sd.cfg.ModelPath); err != nil {
-		return err
-	}
+	// C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
+	// if err := ReleaseSharedSession(sd.cfg.ModelPath); err != nil {
+	// 	return err
+	// }
 
 	for _, ptr := range sd.cStrings {
 		C.free(unsafe.Pointer(ptr))
