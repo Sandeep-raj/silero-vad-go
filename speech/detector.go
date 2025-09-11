@@ -177,14 +177,14 @@ func InitOnnx(logLevel LogLevel, modelPath string) error {
 		}
 
 		// create memoryInfo (you may reuse one global meminfo instead)
-		status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &ortMemoryInfo)
-		defer C.OrtApiReleaseStatus(ortApi, status)
-		if status != nil {
-			// release session before returning
-			C.OrtApiReleaseSession(ortApi, ortSession)
-			onnxInitErr = fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-			return
-		}
+		// status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &ortMemoryInfo)
+		// defer C.OrtApiReleaseStatus(ortApi, status)
+		// if status != nil {
+		// 	// release session before returning
+		// 	C.OrtApiReleaseSession(ortApi, ortSession)
+		// 	onnxInitErr = fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+		// 	return
+		// }
 	})
 
 	return onnxInitErr
@@ -208,17 +208,17 @@ func NewDetector(cfg DetectorConfig) (*Detector, error) {
 		sessionOpts: ortSessionOpts,
 	}
 
-	// sd.session = ortSession
+	sd.session = ortSession
 	// sd.memoryInfo = ortMemoryInfo
 
-	sd.cStrings["modelPath"] = C.CString(cfg.ModelPath)
-	status := C.OrtApiCreateSession(ortApi, ortEnv, sd.cStrings["modelPath"], ortSessionOpts, &sd.session)
-	defer C.OrtApiReleaseStatus(ortApi, status)
-	if status != nil {
-		return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
-	}
+	// sd.cStrings["modelPath"] = C.CString(cfg.ModelPath)
+	// status := C.OrtApiCreateSession(ortApi, ortEnv, sd.cStrings["modelPath"], ortSessionOpts, &sd.session)
+	// defer C.OrtApiReleaseStatus(ortApi, status)
+	// if status != nil {
+	// 	return nil, fmt.Errorf("failed to create session: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
+	// }
 
-	status = C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
+	status := C.OrtApiCreateCpuMemoryInfo(ortApi, C.OrtArenaAllocator, C.OrtMemTypeDefault, &sd.memoryInfo)
 	defer C.OrtApiReleaseStatus(ortApi, status)
 	if status != nil {
 		return nil, fmt.Errorf("failed to create memory info: %s", C.GoString(C.OrtApiGetErrorMessage(ortApi, status)))
@@ -353,7 +353,7 @@ func (sd *Detector) Destroy() error {
 	}
 
 	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
-	C.OrtApiReleaseSession(sd.api, sd.session)
+	// C.OrtApiReleaseSession(sd.api, sd.session)
 
 	for _, ptr := range sd.cStrings {
 		C.free(unsafe.Pointer(ptr))
