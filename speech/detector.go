@@ -351,7 +351,7 @@ func (sd *Detector) Destroy() error {
 	}
 
 	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
-	// C.OrtApiReleaseSession(sd.api, sd.session)
+	C.OrtApiReleaseSession(sd.api, sd.session)
 
 	for _, ptr := range sd.cStrings {
 		C.free(unsafe.Pointer(ptr))
