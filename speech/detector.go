@@ -54,6 +54,8 @@ type DetectorConfig struct {
 	MinSilenceDurationMs int
 	// The padding to add to speech segments to avoid aggressive cutting.
 	SpeechPadMs int
+	// Is it a Stream of data
+	Stream bool
 	// The loglevel for the onnx environment, by default it is set to LogLevelWarn.
 	LogLevel LogLevel
 }
@@ -238,10 +240,16 @@ func (sd *Detector) Detect(pcm []float32) ([]Segment, error) {
 			sd.triggered = false
 			slog.Debug("speech end", slog.Float64("endAt", speechEndAt))
 
+			// Fix: realtime streams coming at different packetization time like 20ms,30ms always throws unexpected errors
+			if len(segments) < 1 && sd.cfg.Stream {
+				segments = append(segments, Segment{
+					SpeechEndAt: speechEndAt,
+				})
+				return segments, nil
+			}
 			if len(segments) < 1 {
 				return nil, fmt.Errorf("unexpected speech end")
 			}
-
 			segments[len(segments)-1].SpeechEndAt = speechEndAt
 		}
 	}
