@@ -350,8 +350,8 @@ func (sd *Detector) Destroy() error {
 		return fmt.Errorf("invalid nil detector")
 	}
 
-	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
 	C.OrtApiReleaseSession(sd.api, sd.session)
+	C.OrtApiReleaseMemoryInfo(sd.api, sd.memoryInfo)
 
 	for _, ptr := range sd.cStrings {
 		C.free(unsafe.Pointer(ptr))
