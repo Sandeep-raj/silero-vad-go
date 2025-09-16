@@ -309,11 +309,9 @@ func (sd *Detector) Detect(pcm []float32) ([]Segment, error) {
 				})
 				return segments, nil
 			}
-
 			if len(segments) < 1 {
 				return nil, fmt.Errorf("unexpected speech end")
 			}
-
 			segments[len(segments)-1].SpeechEndAt = speechEndAt
 		}
 	}
